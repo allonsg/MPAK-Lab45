@@ -11,7 +11,6 @@ const generateSessionKey = () => {
     }
 }
 
-
 const generateKeyPair = async () => {
     try {
         const keypair = await new Promise((resolve, reject) => {
@@ -52,7 +51,7 @@ const getPublicKey = async () => {
     }
 };
 
-const encryptMessage = (iv, sessionKey, plainText, mode) => {
+const encryptFile = (iv, sessionKey, plainText, mode) => {
     const ecnryptMode = ['CBC', 'CFB'].includes(mode) ? mode : 'CBC';
 
     const cipher = forge.cipher.createCipher('AES-' + ecnryptMode, sessionKey);
@@ -70,27 +69,27 @@ const asymmetricEncrypt = async (data) => {
 };
 
 
-const decryptData = async ({initVector, key, encryptedMessage, mode}) => {
+const decryptData = async ({initVector, key, encryptedFile, mode}) => {
     try {
-    const ecnryptMode = ['CBC', 'CFB'].includes(mode) ? mode : 'CBC';
+        const ecnryptMode = ['CBC', 'CFB'].includes(mode) ? mode : 'CBC';
 
-    const privateKeyString = await fs.readFile('private.pem', 'binary');
-    const privateKeyPem = forge.pki.privateKeyFromPem(privateKeyString)
+        const privateKeyString = await fs.readFile('private.pem', 'binary');
+        const privateKeyPem = forge.pki.privateKeyFromPem(privateKeyString)
 
 
-    const decodedKey = forge.util.decode64(key)
-    const decodedIv = forge.util.decode64(initVector)
-    console.log({initVector, key});
+        const decodedKey = forge.util.decode64(key)
+        const decodedIv = forge.util.decode64(initVector)
+        console.log({initVector, key});
 
-    const decryptedKey = privateKeyPem.decrypt(decodedKey, 'RSA-OAEP');
-    const decryptedIv = privateKeyPem.decrypt(decodedIv, 'RSA-OAEP');
+        const decryptedKey = privateKeyPem.decrypt(decodedKey, 'RSA-OAEP');
+        const decryptedIv = privateKeyPem.decrypt(decodedIv, 'RSA-OAEP');
 
-    const decipher = forge.cipher.createDecipher('AES-' + ecnryptMode, decryptedKey);
-    decipher.start({iv: decryptedIv});
-    decipher.update(forge.util.createBuffer(encryptedMessage));
-    decipher.finish();
+        const decipher = forge.cipher.createDecipher('AES-' + ecnryptMode, decryptedKey);
+        decipher.start({iv: decryptedIv});
+        decipher.update(forge.util.createBuffer(encryptedFile));
+        decipher.finish();
 
-    return decipher.output.toString();
+        return decipher.output.toString();
     } catch (error) {
         console.error(error)
         throw new Error('Failed to decrypt data');
@@ -102,9 +101,9 @@ const rl = readline.createInterface({
 });
 
 rl.question('What type of encryption do you want to use? (CBС/CFB) ', (encryptionType) => {
-    rl.question('Enter a message to encrypt: ', async (message) => {
+    rl.question('Enter a path to the file to encrypt: ', async (filePath) => {
         const encryptionTypeNormalized = encryptionType.toUpperCase().trim();
-        const messageTrimmed = message.trim();
+        const fileContent = await fs.readFile(filePath, 'utf8');
 
         await generateKeyPair()
 
@@ -112,8 +111,8 @@ rl.question('What type of encryption do you want to use? (CBС/CFB) ', (encrypti
         console.log('Session key: ', sessionKey);
         console.log('IV: ', iv);
 
-        const encryptedMessage = encryptMessage(iv, sessionKey, messageTrimmed, encryptionTypeNormalized);
-        console.log('Encrypted message: ', encryptedMessage);
+        const encryptedFile = encryptFile(iv, sessionKey, fileContent, encryptionTypeNormalized);
+        console.log('Encrypted file: ', encryptedFile);
 
         const encryptedIv = await asymmetricEncrypt(iv);
         console.log("Encrypted IV: ", encryptedIv)
@@ -121,12 +120,19 @@ rl.question('What type of encryption do you want to use? (CBС/CFB) ', (encrypti
         const encryptedSessionKey = await asymmetricEncrypt(sessionKey);
         console.log("Encrypted Session Key: ", encryptedSessionKey)
 
-        const decryptedMessage = await decryptData({
+        const decryptedFile = await decryptData({
             initVector: encryptedIv,
             key: encryptedSessionKey,
-            encryptedMessage,
+            encryptedFile,
             mode: encryptionTypeNormalized
         });
-        console.log("Decrypted message: ", decryptedMessage);
+        console.log("Decrypted file: ", decryptedFile);
+
+        await fs.writeFile('encrypted.txt', encryptedFile.data, 'utf8');
+        console.log('Encrypted data saved to encrypted.txt');
+
+        await fs.writeFile('decrypted.txt', decryptedFile, 'utf8');
+        console.log('Decrypted data saved to decrypted.txt');
     });
 });
+
